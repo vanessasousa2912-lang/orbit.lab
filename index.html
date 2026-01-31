@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Orbit Lab - Multi-Idioma</title>
+    <title>Orbit Lab - Alta Precisão</title>
     <style>
         body {
             margin: 0; padding: 0; background-color: #050508; color: #e0e0e0;
@@ -154,11 +154,11 @@
     <div id="control-panel">
         <div class="control-group">
             <label id="label-speed">Velocidade: <span id="time-speed-val">1.0</span>x</label>
-            <input type="range" id="time-speed-slider" min="0" max="5.5" step="0.1" value="1">
+            <input type="range" id="time-speed-slider" min="0" max="8.0" step="0.1" value="1">
         </div>
         <div class="control-group">
             <label id="label-mass">Massa Estrela: <span id="sun-mass-val">20k</span></label>
-            <input type="range" id="sun-mass-slider" min="5000" max="150000" step="1000" value="20000">
+            <input type="range" id="sun-mass-slider" min="5000" max="250000" step="1000" value="20000">
         </div>
         <div class="control-group">
             <label id="label-sun-hue">Cor do Sol (Matiz)</label>
@@ -186,6 +186,14 @@
             let hudVisible = true;
             let isPhotoMode = false;
             let selectedPlanet = null;
+
+            // Física Refinada
+            const G = 1.2;
+            const SUBSTEPS = 8; // Aumenta a precisão dividindo o cálculo
+            let config = { sunMass: 20000, timeSpeed: 1.0, sunHue: 45 };
+            let planets = [];
+            let isDragging = false;
+            let startPos = { x: 0, y: 0 }, currentMousePos = { x: 0, y: 0 };
 
             const i18n = {
                 pt: {
@@ -256,12 +264,6 @@
                 }
             };
 
-            const G = 1.2;
-            let config = { sunMass: 20000, timeSpeed: 1.0, sunHue: 45 };
-            let planets = [];
-            let isDragging = false;
-            let startPos = { x: 0, y: 0 }, currentMousePos = { x: 0, y: 0 };
-
             window.setLang = (lang) => {
                 currentLang = lang;
                 document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
@@ -274,21 +276,16 @@
                 document.getElementById('menu-subtitle').innerText = t.subtitle;
                 document.getElementById('start-btn-text').innerText = t.start;
                 document.getElementById('lab-name-input').placeholder = t.labPlaceholder;
-                
                 document.getElementById('label-speed').firstChild.textContent = `${t.speed}: `;
                 document.getElementById('label-mass').firstChild.textContent = `${t.mass}: `;
                 document.getElementById('label-sun-hue').innerText = t.sunHue;
-                
                 document.getElementById('btn-photo-mode').innerText = t.photoMode;
                 document.getElementById('btn-hide-hud').innerText = t.hideHud;
                 document.getElementById('btn-reset-all').innerText = t.clearAll;
                 document.getElementById('reset-btn').innerText = t.clearSys;
-                
                 document.getElementById('instr-1').innerHTML = t.instr1;
                 document.getElementById('instr-2').innerHTML = t.instr2;
                 document.getElementById('interact-hint').innerText = t.hint;
-
-                // Editor
                 document.getElementById('ed-planet-label').innerText = t.planet;
                 document.getElementById('ed-size-label').innerText = t.size;
                 document.getElementById('ed-hue-label').innerText = t.hue;
@@ -296,7 +293,6 @@
                 if (selectedPlanet) {
                     document.getElementById('edit-moon-btn').innerText = selectedPlanet.moon ? t.moonOff : t.moonOn;
                 }
-                
                 updatePlanetCount();
             }
 
@@ -307,7 +303,7 @@
             function init() {
                 window.addEventListener('resize', syncSize);
                 syncSize();
-                setLang('pt'); // Default
+                setLang('pt');
                 
                 document.getElementById('sun-mass-slider').addEventListener('input', (e) => {
                     config.sunMass = parseInt(e.target.value);
@@ -453,10 +449,11 @@
                 if (isPhotoMode) ctx.drawImage(trailCanvas, 0, 0);
 
                 const sx = canvas.width / 2, sy = canvas.height / 2;
-                const t = config.timeSpeed;
+                const dt = config.timeSpeed / SUBSTEPS; // Delta time dividido pelos sub-passos
                 const sRad = 25 + (config.sunMass / 15000) * 4;
                 const sunColor = `hsl(${config.sunHue}, 100%, 60%)`;
                 
+                // Brilho do Sol
                 const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, sRad * 4);
                 g.addColorStop(0, '#fff'); g.addColorStop(0.2, sunColor); g.addColorStop(1, 'transparent');
                 ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, sRad * 5, 0, Math.PI * 2); ctx.fill();
@@ -464,40 +461,69 @@
 
                 for (let i = planets.length - 1; i >= 0; i--) {
                     const p = planets[i];
-                    const ox = p.x, oy = p.y;
-                    const dx = sx - p.x, dy = sy - p.y, d2 = dx * dx + dy * dy, d = Math.sqrt(d2);
-                    const f = (G * config.sunMass) / d2;
-                    p.vx += (dx / d) * f * t; p.vy += (dy / d) * f * t; p.x += p.vx * t; p.y += p.vy * t;
                     
-                    p.trail.push({ x: p.x, y: p.y }); if (p.trail.length > 40) p.trail.shift();
-                    ctx.beginPath(); ctx.strokeStyle = p.color; ctx.globalAlpha = 0.2;
-                    p.trail.forEach((pt, idx) => idx === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
-                    ctx.stroke(); ctx.globalAlpha = 1;
+                    // Cálculo de Física em Sub-steps
+                    for(let s = 0; s < SUBSTEPS; s++) {
+                        const ox = p.x, oy = p.y;
+                        const dx = sx - p.x, dy = sy - p.y, d2 = dx * dx + dy * dy, d = Math.sqrt(d2);
+                        
+                        // Lei da Gravitação Universal de Newton (F = G*M/r^2)
+                        const force = (G * config.sunMass) / d2;
+                        p.vx += (dx / d) * force * dt; 
+                        p.vy += (dy / d) * force * dt; 
+                        p.x += p.vx * dt; 
+                        p.y += p.vy * dt;
 
-                    if (isPhotoMode) {
-                        trailCtx.beginPath(); trailCtx.strokeStyle = p.color; trailCtx.globalAlpha = 0.5;
-                        trailCtx.moveTo(ox, oy); trailCtx.lineTo(p.x, p.y); trailCtx.stroke();
-                    }
-
-                    if (p.moon) {
-                        const m = p.moon, mox = p.x + m.relX, moy = p.y + m.relY;
-                        const mdx = -m.relX, mdy = -m.relY, md2 = mdx * mdx + mdy * mdy, md = Math.sqrt(md2), mf = (G * p.mass * 3.5) / md2;
-                        m.vx += (mdx / md) * mf * t; m.vy += (mdy / md) * mf * t; m.relX += m.vx * t; m.relY += m.vy * t;
-                        const mx = p.x + m.relX, my = p.y + m.relY;
-                        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(mx, my, 2, 0, Math.PI * 2); ctx.fill();
+                        // Desenho dos rastros no Modo Foto (Alta fidelidade)
                         if (isPhotoMode) {
-                            trailCtx.beginPath(); trailCtx.strokeStyle = 'rgba(255,255,255,0.3)';
-                            trailCtx.moveTo(mox, moy); trailCtx.lineTo(mx, my); trailCtx.stroke();
+                            trailCtx.beginPath(); trailCtx.strokeStyle = p.color; trailCtx.globalAlpha = 0.4;
+                            trailCtx.lineWidth = 1; trailCtx.moveTo(ox, oy); trailCtx.lineTo(p.x, p.y); trailCtx.stroke();
+                        }
+
+                        // Física da Lua
+                        if (p.moon) {
+                            const m = p.moon, mox = p.x + m.relX, moy = p.y + m.relY;
+                            const mdx = -m.relX, mdy = -m.relY, md2 = mdx * mdx + mdy * mdy, md = Math.sqrt(md2);
+                            const mf = (G * p.mass * 3.5) / md2;
+                            m.vx += (mdx / md) * mf * dt; m.vy += (mdy / md) * mf * dt;
+                            m.relX += m.vx * dt; m.relY += m.vy * dt;
+                            const mx = p.x + m.relX, my = p.y + m.relY;
+                            
+                            if (isPhotoMode) {
+                                trailCtx.beginPath(); trailCtx.strokeStyle = 'rgba(255,255,255,0.2)';
+                                trailCtx.moveTo(mox, moy); trailCtx.lineTo(mx, my); trailCtx.stroke();
+                            }
+                        }
+
+                        // Verificação de Colisão (feita nos sub-passos para não "atravessar" o sol)
+                        if (d < sRad + p.size) {
+                            planets.splice(i, 1);
+                            updatePlanetCount();
+                            break; 
                         }
                     }
 
-                    ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
-                    if (p === selectedPlanet && !isPhotoMode) {
-                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, p.size + 4, 0, Math.PI * 2); ctx.stroke();
-                    }
-                    if (d < sRad + p.size || d > 6000) {
-                        planets.splice(i, 1);
-                        updatePlanetCount();
+                    // Desenho Visual (Rastros HUD e Planeta)
+                    if (planets[i]) {
+                        p.trail.push({ x: p.x, y: p.y }); if (p.trail.length > 40) p.trail.shift();
+                        ctx.beginPath(); ctx.strokeStyle = p.color; ctx.globalAlpha = 0.2;
+                        p.trail.forEach((pt, idx) => idx === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+                        ctx.stroke(); ctx.globalAlpha = 1;
+
+                        ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+                        
+                        if (p.moon) {
+                            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x + p.moon.relX, p.y + p.moon.relY, 2, 0, Math.PI * 2); ctx.fill();
+                        }
+
+                        if (p === selectedPlanet && !isPhotoMode) {
+                            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, p.size + 4, 0, Math.PI * 2); ctx.stroke();
+                        }
+
+                        if (Math.abs(p.x) > 10000 || Math.abs(p.y) > 10000) {
+                            planets.splice(i, 1);
+                            updatePlanetCount();
+                        }
                     }
                 }
 
@@ -512,4 +538,3 @@
     </script>
 </body>
 </html>
-
