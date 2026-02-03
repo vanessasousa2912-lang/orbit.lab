@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="pt-pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Orbit lab! seu simulador gravitacional artístico </title>
+    <style>
+        body {
+            margin: 0; padding: 0; background-color: #050508; color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden; user-select: none; touch-action: none;
+        }
+
+        /* Menu Inicial */
+        #main-menu {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #0f0f17; display: flex; justify-content: center; align-items: center;
+            z-index: 1000; transition: opacity 0.8s ease, visibility 0.8s; padding: 20px; box-sizing: border-box;
+        }
+
+        .menu-container {
+            display: flex; flex-direction: row; align-items: center; background: #161625;
+            padding: 40px; gap: 40px; max-width: 1000px; width: 100%;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); position: relative;
+        }
+
+        @media (max-width: 850px) {
+            .menu-container { flex-direction: column; padding: 30px 20px; text-align: center; overflow-y: auto; max-height: 95vh; }
+            .menu-right { border-left: none !important; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px; min-height: 150px !important; }
+        }
+
+        .menu-left { flex: 1.2; text-align: left; }
+        .menu-right { flex: 0.8; display: flex; justify-content: center; align-items: center; position: relative; min-height: 300px; border-left: 1px solid rgba(255,255,255,0.1); }
+        .menu-credits { position: absolute; bottom: 15px; left: 40px; font-size: 11px; color: #555; text-transform: uppercase; }
+
+        .preview-system { position: relative; width: 180px; height: 180px; display: flex; justify-content: center; align-items: center; }
+        .preview-sun { width: 30px; height: 30px; background: #ffcc00; border-radius: 50%; box-shadow: 0 0 30px #ffaa00; z-index: 2; }
+        .preview-orbit { position: absolute; border: 1px solid rgba(255,255,255,0.1); border-radius: 50%; }
+        .orbit-1 { width: 80px; height: 80px; animation: rotate 8s linear infinite; }
+        .orbit-2 { width: 130px; height: 130px; animation: rotate 12s linear infinite; }
+        .preview-planet { position: absolute; border-radius: 50%; top: -5px; left: 50%; transform: translateX(-50%); }
+        .p1 { width: 8px; height: 8px; background: #ff4444; }
+        .p2 { width: 10px; height: 10px; background: #00ffcc; }
+
+        @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        h1 { margin: 0 0 10px 0; font-size: 44px; color: #ffcc00; }
+        .subtitle { color: #888; margin-bottom: 20px; font-size: 16px; }
+
+        .input-group { display: flex; flex-direction: column; gap: 15px; margin-bottom: 25px; }
+        #lab-name-input { background: #1a1a2e; border: 1px solid #333; color: #fff; padding: 12px; font-size: 14px; border-radius: 4px; }
+        
+        .lang-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 10px; }
+        .lang-btn { background: #222; color: #888; border: 1px solid #333; padding: 6px; cursor: pointer; font-size: 11px; border-radius: 4px; }
+        .lang-btn.active { background: #00ffcc; color: #000; font-weight: bold; }
+
+        .start-btn { background: #00ffcc; color: #000; border: none; padding: 15px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; border-radius: 4px; transition: transform 0.2s; }
+        .start-btn:active { transform: scale(0.98); }
+        
+        /* HUD */
+        #ui-header, #control-panel, #reset-btn, .stats { opacity: 0; pointer-events: none; transition: opacity 0.5s; z-index: 50; }
+        #ui-header { position: absolute; top: 20px; left: 20px; }
+        .lab-name-display { font-size: 20px; font-weight: bold; color: #ffcc00; margin-bottom: 8px; display: block; }
+        #ui-layer { background: rgba(20,20,30,0.8); padding: 10px; border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(5px); }
+        #control-panel { position: absolute; top: 20px; right: 20px; background: rgba(20,20,30,0.85); padding: 15px; width: 220px; border: 1px solid rgba(255,255,255,0.1); max-height: 85vh; overflow-y: auto; }
+
+        .control-group { margin-bottom: 15px; }
+        label { display: block; font-size: 10px; color: #888; margin-bottom: 5px; text-transform: uppercase; }
+        input[type="range"] { width: 100%; accent-color: #00ffcc; }
+
+        .stats { position: absolute; bottom: 20px; right: 20px; font-family: monospace; color: #00ffcc; font-size: 12px; text-align: right; }
+        #reset-btn { position: absolute; bottom: 20px; left: 20px; background: rgba(255,68,68,0.1); color: #ff4444; border: 1px solid #ff4444; padding: 10px 15px; cursor: pointer; font-weight: bold; }
+
+        .panel-btn { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 8px; cursor: pointer; font-size: 11px; margin-top: 5px; }
+        
+        /* Editor de Planeta */
+        #planet-editor {
+            position: fixed; display: none; background: rgba(15,15,25,0.95); border: 1px solid #00ffcc;
+            padding: 12px; border-radius: 8px; z-index: 200; width: 160px; pointer-events: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8); backdrop-filter: blur(10px);
+        }
+        .editor-title { font-size: 11px; color: #00ffcc; margin-bottom: 10px; border-bottom: 1px solid rgba(0,255,204,0.2); padding-bottom: 5px; display: flex; justify-content: space-between; }
+        .editor-close { cursor: pointer; color: #ff4444; font-weight: bold; }
+        .editor-btn { background: #222; border: 1px solid #444; color: #fff; font-size: 10px; padding: 5px; width: 100%; margin-top: 8px; cursor: pointer; border-radius: 4px; }
+        .delete-btn { color: #ff4444; border-color: #ff4444; }
+
+        /* Estilo Modo Foto - Interface Limpa */
+        .photo-mode-active #ui-header, 
+        .photo-mode-active #control-panel, 
+        .photo-mode-active #reset-btn, 
+        .photo-mode-active .stats,
+        .photo-mode-active #planet-editor {
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
+        #interact-hint { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); font-size: 11px; color: rgba(0, 255, 204, 0.4); cursor: pointer; opacity: 0; transition: opacity 0.5s; z-index: 100; }
+        canvas { display: block; position: absolute; top: 0; left: 0; z-index: 1; }
+        .hidden-hud { opacity: 0 !important; pointer-events: none !important; }
+        
+        .zoom-keys-hint { font-size: 10px; color: #555; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px; }
+        .key-badge { background: #333; padding: 1px 4px; border-radius: 3px; color: #00ffcc; }
+    </style>
+</head>
+<body>
+
+    <div id="main-menu">
+        <div class="menu-container">
+            <div class="menu-left">
+                <h1 id="lab-title">Orbit Lab</h1>
+                <p id="menu-subtitle" class="subtitle">Simulador gravitacional artístico.</p>
+                <div class="input-group">
+                    <input type="text" id="lab-name-input" placeholder="Nome do Lab..." maxlength="15">
+                    <div class="lang-grid">
+                        <button class="lang-btn active" id="btn-pt" onclick="setLang('pt')">PT</button>
+                        <button class="lang-btn" id="btn-en" onclick="setLang('en')">EN</button>
+                        <button class="lang-btn" id="btn-es" onclick="setLang('es')">ES</button>
+                    </div>
+                </div>
+                <button id="start-btn-text" class="start-btn" onclick="startSim()">Começar Experiência</button>
+            </div>
+            <div class="menu-right">
+                <div class="preview-system">
+                    <div class="preview-sun"></div>
+                    <div class="preview-orbit orbit-1"><div class="preview-planet p1"></div></div>
+                    <div class="preview-orbit orbit-2"><div class="preview-planet p2"></div></div>
+                </div>
+            </div>
+            <div class="menu-credits" id="credits-text">Ideias por <b>Luís</b> • Feito por <b>Gemini</b></div>
+        </div>
+    </div>
+
+    <div id="planet-editor">
+        <div class="editor-title"><span id="ed-planet-label">PLANETA</span> <span class="editor-close" onclick="closeEditor()">X</span></div>
+        <div class="control-group">
+            <label id="ed-size-label">Tamanho</label>
+            <input type="range" id="edit-size" min="4" max="25" value="6">
+        </div>
+        <div class="control-group">
+            <label id="ed-hue-label">Cor (Matiz)</label>
+            <input type="range" id="edit-hue" min="0" max="360" value="180">
+        </div>
+        <button class="editor-btn" id="edit-moon-btn" onclick="toggleMoonEditor()">Ligar Lua</button>
+        <button class="editor-btn delete-btn" id="ed-delete-btn" onclick="deletePlanetEditor()">Eliminar</button>
+    </div>
+
+    <div id="interact-hint" onclick="toggleHUD()">Clique para restaurar a interface</div>
+
+    <div id="ui-header">
+        <span class="lab-name-display" id="header-name">Orbit Lab</span>
+        <div id="ui-layer">
+            <p id="instr-1" style="margin:0; font-size: 12px;"></p>
+            <p id="instr-2" style="margin:4px 0 0 0; font-size: 12px;"></p>
+        </div>
+    </div>
+
+    <div id="control-panel">
+        <div class="control-group">
+            <label id="label-speed">Velocidade: <span id="time-speed-val">1.0</span>x</label>
+            <input type="range" id="time-speed-slider" min="0" max="8.0" step="0.1" value="1">
+        </div>
+        <div class="control-group">
+            <label id="label-mass">Massa Estrela: <span id="sun-mass-val">20k</span></label>
+            <input type="range" id="sun-mass-slider" min="5000" max="250000" step="1000" value="20000">
+        </div>
+        <div class="control-group">
+            <label id="label-sun-hue">Cor do Sol (Matiz)</label>
+            <input type="range" id="sun-hue-slider" min="0" max="360" step="1" value="45">
+        </div>
+        <button class="panel-btn" id="btn-photo-mode" onclick="togglePhotoMode()" style="border-color: #3498db; color: #3498db;">Modo Foto (P)</button>
+        <button class="panel-btn" id="btn-hide-hud" onclick="toggleHUD()">Esconder HUD (H)</button>
+        <button class="panel-btn" id="btn-reset-all" onclick="resetSim()">Limpar Tudo</button>
+        
+        <div class="zoom-keys-hint">
+            <span class="key-badge">Q</span> Aumentar Zoom<br>
+            <span class="key-badge">E</span> Diminuir Zoom
+        </div>
+    </div>
+
+    <button id="reset-btn" onclick="resetSim()">Limpar Sistema</button>
+    <div class="stats">
+        <div id="zoom-stat">Zoom: 100%</div>
+        <div id="planet-count">Corpos: 0</div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            const trailCanvas = document.createElement('canvas');
+            const trailCtx = trailCanvas.getContext('2d');
+            
+            let currentLang = 'pt';
+            let menuActive = true;
+            let hudVisible = true;
+            let isPhotoMode = false;
+            let selectedPlanet = null;
+
+            // Sistema de Zoom
+            let viewScale = 1.0;
+            const minScale = 0.2;
+            const maxScale = 5.0;
+            const zoomSpeed = 0.05;
+            const keys = { q: false, e: false };
+
+            // Física Refinada
+            const G = 1.2;
+            const SUBSTEPS = 8; 
+            let config = { sunMass: 20000, timeSpeed: 1.0, sunHue: 45 };
+            let planets = [];
+            let isDragging = false;
+            let startPos = { x: 0, y: 0 }, currentMousePos = { x: 0, y: 0 };
+
+            const i18n = {
+                pt: {
+                    subtitle: "Simulador gravitacional artístico.",
+                    start: "Começar Experiência",
+                    speed: "Velocidade",
+                    mass: "Massa Estrela",
+                    sunHue: "Cor do Sol (Matiz)",
+                    photoMode: "Modo Foto (P)",
+                    hideHud: "Esconder HUD (H)",
+                    clearAll: "Limpar Tudo",
+                    clearSys: "Limpar Sistema",
+                    bodies: "Corpos",
+                    instr1: "• <b>Arraste</b> para lançar planetas.",
+                    instr2: "• <b>P</b> Modo Foto | <b>Q/E</b> Zoom.",
+                    hint: "Clique para restaurar a interface",
+                    planet: "PLANETA",
+                    size: "Tamanho",
+                    hue: "Cor (Matiz)",
+                    moonOn: "Ligar Lua",
+                    moonOff: "Remover Lua",
+                    delete: "Eliminar",
+                    labPlaceholder: "Nome do Lab..."
+                },
+                en: {
+                    subtitle: "Artistic gravity simulator.",
+                    start: "Start Experience",
+                    speed: "Speed",
+                    mass: "Star Mass",
+                    sunHue: "Sun Color (Hue)",
+                    photoMode: "Photo Mode (P)",
+                    hideHud: "Hide HUD (H)",
+                    clearAll: "Clear All",
+                    clearSys: "Clear System",
+                    bodies: "Bodies",
+                    instr1: "• <b>Drag</b> to launch planets.",
+                    instr2: "• <b>P</b> Photo Mode | <b>Q/E</b> Zoom.",
+                    hint: "Click to restore interface",
+                    planet: "PLANET",
+                    size: "Size",
+                    hue: "Color (Hue)",
+                    moonOn: "Add Moon",
+                    moonOff: "Remove Moon",
+                    delete: "Delete",
+                    labPlaceholder: "Lab Name..."
+                },
+                es: {
+                    subtitle: "Simulador gravitacional artístico.",
+                    start: "Empezar Experiencia",
+                    speed: "Velocidad",
+                    mass: "Masa Estrella",
+                    sunHue: "Color del Sol (Matiz)",
+                    photoMode: "Modo Foto (P)",
+                    hideHud: "Ocultar HUD (H)",
+                    clearAll: "Limpiar Todo",
+                    clearSys: "Limpiar Sistema",
+                    bodies: "Cuerpos",
+                    instr1: "• <b>Arrastra</b> para lanzar planetas.",
+                    instr2: "• <b>P</b> Modo Foto | <b>Q/E</b> Zoom.",
+                    hint: "Clic para restaurar interfaz",
+                    planet: "PLANETA",
+                    size: "Tamaño",
+                    hue: "Color (Matiz)",
+                    moonOn: "Añadir Luna",
+                    moonOff: "Quitar Luna",
+                    delete: "Eliminar",
+                    labPlaceholder: "Nombre del Lab..."
+                }
+            };
+
+            window.setLang = (lang) => {
+                currentLang = lang;
+                document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+                document.getElementById(`btn-${lang}`).classList.add('active');
+                updateTexts();
+            };
+
+            function updateTexts() {
+                const t = i18n[currentLang];
+                document.getElementById('menu-subtitle').innerText = t.subtitle;
+                document.getElementById('start-btn-text').innerText = t.start;
+                document.getElementById('lab-name-input').placeholder = t.labPlaceholder;
+                document.getElementById('label-speed').firstChild.textContent = `${t.speed}: `;
+                document.getElementById('label-mass').firstChild.textContent = `${t.mass}: `;
+                document.getElementById('label-sun-hue').innerText = t.sunHue;
+                document.getElementById('btn-photo-mode').innerText = t.photoMode;
+                document.getElementById('btn-hide-hud').innerText = t.hideHud;
+                document.getElementById('btn-reset-all').innerText = t.clearAll;
+                document.getElementById('reset-btn').innerText = t.clearSys;
+                document.getElementById('instr-1').innerHTML = t.instr1;
+                document.getElementById('instr-2').innerHTML = t.instr2;
+                document.getElementById('interact-hint').innerText = t.hint;
+                document.getElementById('ed-planet-label').innerText = t.planet;
+                document.getElementById('ed-size-label').innerText = t.size;
+                document.getElementById('ed-hue-label').innerText = t.hue;
+                document.getElementById('ed-delete-btn').innerText = t.delete;
+                if (selectedPlanet) {
+                    document.getElementById('edit-moon-btn').innerText = selectedPlanet.moon ? t.moonOff : t.moonOn;
+                }
+                updatePlanetCount();
+            }
+
+            function updatePlanetCount() {
+                document.getElementById('planet-count').innerText = `${i18n[currentLang].bodies}: ${planets.length}`;
+            }
+
+            function init() {
+                window.addEventListener('resize', syncSize);
+                syncSize();
+                setLang('pt');
+                
+                document.getElementById('sun-mass-slider').addEventListener('input', (e) => {
+                    config.sunMass = parseInt(e.target.value);
+                    document.getElementById('sun-mass-val').innerText = Math.round(e.target.value / 1000) + 'k';
+                });
+                document.getElementById('time-speed-slider').addEventListener('input', (e) => {
+                    config.timeSpeed = parseFloat(e.target.value);
+                    document.getElementById('time-speed-val').innerText = config.timeSpeed.toFixed(1);
+                });
+                document.getElementById('sun-hue-slider').addEventListener('input', (e) => {
+                    config.sunHue = parseInt(e.target.value);
+                });
+
+                document.getElementById('edit-size').addEventListener('input', (e) => {
+                    if(selectedPlanet) {
+                        selectedPlanet.size = parseInt(e.target.value);
+                        selectedPlanet.mass = selectedPlanet.size * 150;
+                    }
+                });
+                document.getElementById('edit-hue').addEventListener('input', (e) => {
+                    if(selectedPlanet) {
+                        selectedPlanet.hue = parseInt(e.target.value);
+                        selectedPlanet.color = `hsl(${selectedPlanet.hue}, 80%, 65%)`;
+                    }
+                });
+
+                // Zoom por teclado
+                window.addEventListener('keydown', (e) => {
+                    const k = e.key.toLowerCase();
+                    if (k === 'p') togglePhotoMode();
+                    if (k === 'h') toggleHUD();
+                    if (k === 'q') keys.q = true;
+                    if (k === 'e') keys.e = true;
+                });
+                window.addEventListener('keyup', (e) => {
+                    const k = e.key.toLowerCase();
+                    if (k === 'q') keys.q = false;
+                    if (k === 'e') keys.e = false;
+                });
+
+                // Zoom por scroll
+                window.addEventListener('wheel', (e) => {
+                    if (menuActive) return;
+                    if (e.deltaY < 0) viewScale *= (1 + zoomSpeed);
+                    else viewScale /= (1 + zoomSpeed);
+                    applyZoomLimits();
+                }, { passive: true });
+
+                canvas.addEventListener('mousedown', (e) => handleStart(e.clientX, e.clientY));
+                window.addEventListener('mousemove', (e) => { if (isDragging) currentMousePos = { x: e.clientX, y: e.clientY }; });
+                window.addEventListener('mouseup', handleEnd);
+
+                requestAnimationFrame(loop);
+            }
+
+            function applyZoomLimits() {
+                viewScale = Math.max(minScale, Math.min(maxScale, viewScale));
+                document.getElementById('zoom-stat').innerText = `Zoom: ${Math.round(viewScale * 100)}%`;
+            }
+
+            function syncSize() {
+                canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+                trailCanvas.width = window.innerWidth; trailCanvas.height = window.innerHeight;
+            }
+
+            window.startSim = () => {
+                const nameInput = document.getElementById('lab-name-input').value.trim();
+                document.getElementById('header-name').innerText = nameInput || "Orbit Lab";
+                document.getElementById('main-menu').style.opacity = '0';
+                setTimeout(() => {
+                    document.getElementById('main-menu').style.visibility = 'hidden';
+                    menuActive = false;
+                    ['ui-header', 'control-panel', 'reset-btn', '.stats'].forEach(sel => {
+                        const el = sel.startsWith('.') ? document.querySelector(sel) : document.getElementById(sel); 
+                        if(el) { el.style.opacity = '1'; el.style.pointerEvents = 'auto'; }
+                    });
+                }, 800);
+            };
+
+            // Converte coordenadas da tela para o mundo (levando em conta o zoom)
+            function screenToWorld(x, y) {
+                const cx = canvas.width / 2;
+                const cy = canvas.height / 2;
+                return {
+                    x: (x - cx) / viewScale + cx,
+                    y: (y - cy) / viewScale + cy
+                };
+            }
+
+            function handleStart(x, y) {
+                if (menuActive || isPhotoMode) return;
+                
+                const worldPos = screenToWorld(x, y);
+
+                let clickedPlanet = null;
+                for (let p of planets) {
+                    const d = Math.sqrt(Math.pow(worldPos.x - p.x, 2) + Math.pow(worldPos.y - p.y, 2));
+                    // A área de clique aumenta se o zoom for pequeno para facilitar a seleção
+                    const clickArea = (p.size + 15) / Math.min(viewScale, 1.0);
+                    if (d < clickArea) { clickedPlanet = p; break; }
+                }
+                
+                if (clickedPlanet) { openEditor(clickedPlanet, x, y); return; }
+                closeEditor();
+                isDragging = true; startPos = { x, y }; currentMousePos = { x, y };
+            }
+
+            function handleEnd() {
+                if (!isDragging) return; isDragging = false;
+                const dist = Math.sqrt(Math.pow(currentMousePos.x - startPos.x, 2) + Math.pow(currentMousePos.y - startPos.y, 2));
+                if (dist > 10) launchPlanet();
+            }
+
+            function launchPlanet() {
+                const worldStart = screenToWorld(startPos.x, startPos.y);
+                const worldEnd = screenToWorld(currentMousePos.x, currentMousePos.y);
+
+                const dx = (worldStart.x - worldEnd.x) * 0.12, dy = (worldStart.y - worldEnd.y) * 0.12;
+                const hue = Math.floor(Math.random() * 360);
+                planets.push({ 
+                    x: worldStart.x, y: worldStart.y, vx: dx, vy: dy, 
+                    size: 6, mass: 900, hue: hue, 
+                    color: `hsl(${hue}, 80%, 65%)`, trail: [], moon: null 
+                });
+                updatePlanetCount();
+            }
+
+            function openEditor(planet, x, y) {
+                selectedPlanet = planet;
+                const editor = document.getElementById('planet-editor');
+                editor.style.display = 'block';
+                editor.style.left = Math.min(x + 20, window.innerWidth - 180) + 'px';
+                editor.style.top = Math.min(y - 50, window.innerHeight - 200) + 'px';
+                document.getElementById('edit-size').value = planet.size;
+                document.getElementById('edit-hue').value = planet.hue;
+                document.getElementById('edit-moon-btn').innerText = planet.moon ? i18n[currentLang].moonOff : i18n[currentLang].moonOn;
+            }
+
+            window.closeEditor = () => { selectedPlanet = null; document.getElementById('planet-editor').style.display = 'none'; };
+            window.deletePlanetEditor = () => { if(selectedPlanet) { planets = planets.filter(p => p !== selectedPlanet); closeEditor(); updatePlanetCount(); } };
+
+            window.toggleMoonEditor = () => {
+                if(!selectedPlanet) return;
+                const t = i18n[currentLang];
+                if(selectedPlanet.moon) {
+                    selectedPlanet.moon = null;
+                    document.getElementById('edit-moon-btn').innerText = t.moonOn;
+                } else {
+                    const dist = selectedPlanet.size + 25, vel = Math.sqrt((G * selectedPlanet.mass * 2.8) / dist);
+                    selectedPlanet.moon = { relX: dist, relY: 0, vx: 0, vy: vel };
+                    document.getElementById('edit-moon-btn').innerText = t.moonOff;
+                }
+            };
+
+            window.toggleHUD = () => {
+                hudVisible = !hudVisible;
+                ['ui-header', 'control-panel', 'reset-btn', '.stats'].forEach(sel => {
+                    const el = sel.startsWith('.') ? document.querySelector(sel) : document.getElementById(sel);
+                    if(el) el.classList.toggle('hidden-hud', !hudVisible);
+                });
+                document.getElementById('interact-hint').style.opacity = hudVisible ? '0' : '1';
+                document.getElementById('interact-hint').style.pointerEvents = hudVisible ? 'none' : 'auto';
+            };
+
+            window.togglePhotoMode = () => {
+                isPhotoMode = !isPhotoMode;
+                document.body.classList.toggle('photo-mode-active', isPhotoMode);
+                if (isPhotoMode) {
+                    closeEditor();
+                    document.getElementById('interact-hint').style.opacity = '1';
+                    document.getElementById('interact-hint').style.pointerEvents = 'auto';
+                } else {
+                    trailCtx.clearRect(0, 0, trailCanvas.width, trailCanvas.height);
+                    document.getElementById('interact-hint').style.opacity = '0';
+                }
+            };
+
+            window.resetSim = () => {
+                planets = [];
+                trailCtx.clearRect(0, 0, trailCanvas.width, trailCanvas.height);
+                closeEditor();
+                updatePlanetCount();
+            };
+
+            function updateZoomLogic() {
+                if (keys.q) viewScale *= (1 + zoomSpeed * 0.5);
+                if (keys.e) viewScale /= (1 + zoomSpeed * 0.5);
+                if (keys.q || keys.e) applyZoomLimits();
+            }
+
+            function loop() {
+                ctx.fillStyle = '#050508'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                if (menuActive) { requestAnimationFrame(loop); return; }
+                
+                updateZoomLogic();
+
+                // Aplicar transformações de Zoom
+                ctx.save();
+                const cx = canvas.width / 2;
+                const cy = canvas.height / 2;
+                ctx.translate(cx, cy);
+                ctx.scale(viewScale, viewScale);
+                ctx.translate(-cx, -cy);
+
+                // No Modo Foto, desenhamos os rastros persistentes
+                if (isPhotoMode) {
+                    // Nota: O rastro do Modo Foto em Canvas escalado pode exigir redesenho ou offset.
+                    // Para simplificar, desenhamos o canvas de rastro projetado.
+                    ctx.save();
+                    // Como o trailCanvas é estático, precisamos compensar a escala
+                    ctx.globalCompositeOperation = 'screen';
+                    ctx.drawImage(trailCanvas, 0, 0);
+                    ctx.restore();
+                }
+
+                const sx = canvas.width / 2, sy = canvas.height / 2;
+                const dt = config.timeSpeed / SUBSTEPS; 
+                const sRad = 25 + (config.sunMass / 15000) * 4;
+                const sunColor = `hsl(${config.sunHue}, 100%, 60%)`;
+                
+                // Brilho do Sol
+                const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, sRad * 4);
+                g.addColorStop(0, '#fff'); g.addColorStop(0.2, sunColor); g.addColorStop(1, 'transparent');
+                ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, sRad * 5, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = sunColor; ctx.beginPath(); ctx.arc(sx, sy, sRad, 0, Math.PI * 2); ctx.fill();
+
+                for (let i = planets.length - 1; i >= 0; i--) {
+                    const p = planets[i];
+                    
+                    for(let s = 0; s < SUBSTEPS; s++) {
+                        const ox = p.x, oy = p.y;
+                        const dx = sx - p.x, dy = sy - p.y, d2 = dx * dx + dy * dy, d = Math.sqrt(d2);
+                        
+                        const force = (G * config.sunMass) / d2;
+                        p.vx += (dx / d) * force * dt; 
+                        p.vy += (dy / d) * force * dt; 
+                        p.x += p.vx * dt; 
+                        p.y += p.vy * dt;
+
+                        if (isPhotoMode) {
+                            trailCtx.save();
+                            // Desenha no trailCanvas (que não sofre escala direta para não borrar)
+                            // Precisamos transformar as coordenadas mundiais para o canvas estático
+                            trailCtx.beginPath(); trailCtx.strokeStyle = p.color; trailCtx.globalAlpha = 0.4;
+                            trailCtx.lineWidth = 1; 
+                            
+                            // Desenho do rastro direto no trailCanvas (precisa compensar zoom se quiser persistência perfeita)
+                            // Por simplicidade aqui, o rastro "Modo Foto" fica fixo na resolução original.
+                            trailCtx.moveTo(ox, oy); trailCtx.lineTo(p.x, p.y);
+                            trailCtx.stroke();
+                            trailCtx.restore();
+                        }
+
+                        // Física da Lua
+                        if (p.moon) {
+                            const m = p.moon, mox = p.x + m.relX, moy = p.y + m.relY;
+                            const mdx = -m.relX, mdy = -m.relY, md2 = mdx * mdx + mdy * mdy, md = Math.sqrt(md2);
+                            const mf = (G * p.mass * 3.5) / md2;
+                            m.vx += (mdx / md) * mf * dt; m.vy += (mdy / md) * mf * dt;
+                            m.relX += m.vx * dt; m.relY += m.vy * dt;
+                        }
+
+                        if (d < sRad + p.size) {
+                            planets.splice(i, 1);
+                            updatePlanetCount();
+                            break; 
+                        }
+                    }
+
+                    if (planets[i]) {
+                        p.trail.push({ x: p.x, y: p.y }); if (p.trail.length > 40) p.trail.shift();
+                        ctx.beginPath(); ctx.strokeStyle = p.color; ctx.globalAlpha = 0.2;
+                        p.trail.forEach((pt, idx) => idx === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+                        ctx.stroke(); ctx.globalAlpha = 1;
+
+                        ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+                        
+                        if (p.moon) {
+                            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x + p.moon.relX, p.y + p.moon.relY, 2, 0, Math.PI * 2); ctx.fill();
+                        }
+
+                        if (p === selectedPlanet && !isPhotoMode) {
+                            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 / viewScale; // Ajusta espessura da seleção
+                            ctx.beginPath(); ctx.arc(p.x, p.y, p.size + 4, 0, Math.PI * 2); ctx.stroke();
+                        }
+
+                        // Planetas muito longe são removidos (ajustado para o mundo)
+                        if (Math.abs(p.x - sx) > 20000 || Math.abs(p.y - sy) > 20000) {
+                            planets.splice(i, 1);
+                            updatePlanetCount();
+                        }
+                    }
+                }
+
+                ctx.restore(); // Fim das transformações de Zoom
+
+                // UI que não sofre zoom (Linha de lançamento)
+                if (isDragging) {
+                    ctx.beginPath(); ctx.moveTo(startPos.x, startPos.y); ctx.lineTo(currentMousePos.x, currentMousePos.y);
+                    ctx.strokeStyle = '#00ffcc'; ctx.setLineDash([5, 5]); ctx.stroke(); ctx.setLineDash([]);
+                }
+                
+                requestAnimationFrame(loop);
+            }
+            init();
+        })();
+    </script>
+</body>
+</html>
