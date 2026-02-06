@@ -204,6 +204,10 @@
             const zoomSpeed = 0.05;
             const keys = { q: false, e: false };
 
+            // Estado para Zoom Touch
+            let initialPinchDist = null;
+            let initialScale = 1.0;
+
             const G = 1.2;
             const SUBSTEPS = 8; 
             let config = { sunMass: 20000, timeSpeed: 1.0, sunHue: 45 };
@@ -226,7 +230,7 @@
                     clearSys: "Limpar Sistema",
                     bodies: "Corpos",
                     instr1: "• <b>Arraste</b> para lançar planetas.",
-                    instr2: "• <b>P</b> Modo Foto | <b>Q/E</b> Zoom.",
+                    instr2: "• <b>Pinça</b> para Zoom (Mobile).",
                     hint: "Clique para restaurar a interface",
                     planet: "PLANETA",
                     size: "Tamanho",
@@ -250,7 +254,7 @@
                     clearSys: "Clear System",
                     bodies: "Bodies",
                     instr1: "• <b>Drag</b> to launch planets.",
-                    instr2: "• <b>P</b> Photo Mode | <b>Q/E</b> Zoom.",
+                    instr2: "• <b>Pinch</b> to Zoom (Mobile).",
                     hint: "Click to restore interface",
                     planet: "PLANET",
                     size: "Size",
@@ -274,7 +278,7 @@
                     clearSys: "Limpiar Sistema",
                     bodies: "Cuerpos",
                     instr1: "• <b>Arrastra</b> para lanzar planetas.",
-                    instr2: "• <b>P</b> Photo Mode | <b>Q/E</b> Zoom.",
+                    instr2: "• <b>Pinza</b> para Zoom (Móvil).",
                     hint: "Clic para restaurar interfaz",
                     planet: "PLANETA",
                     size: "Tamaño",
@@ -342,24 +346,14 @@
 
             function spawnComet() {
                 if (menuActive) return;
-                
-                // Escolhe um ponto de entrada aleatório nos bordos do ecrã
                 const side = Math.floor(Math.random() * 4);
                 let x, y, vx, vy;
-                const speed = 4 + Math.random() * 6; // Mais rápido que antes
-
+                const speed = 4 + Math.random() * 6;
                 if (side === 0) { x = -100; y = Math.random() * canvas.height; vx = speed; vy = (Math.random() - 0.5) * speed; } 
                 else if (side === 1) { x = canvas.width + 100; y = Math.random() * canvas.height; vx = -speed; vy = (Math.random() - 0.5) * speed; } 
                 else if (side === 2) { x = Math.random() * canvas.width; y = -100; vx = (Math.random() - 0.5) * speed; vy = speed; } 
                 else { x = Math.random() * canvas.width; y = canvas.height + 100; vx = (Math.random() - 0.5) * speed; vy = -speed; } 
-
-                comets.push({ 
-                    x, y, vx, vy, 
-                    length: 150 + Math.random() * 200,
-                    hue: 180 + Math.random() * 60 // Tons azulados/brancos
-                });
-                
-                // Próximo cometa muito mais cedo (3 a 7 segs)
+                comets.push({ x, y, vx, vy, length: 150 + Math.random() * 200, hue: 180 + Math.random() * 60 });
                 setTimeout(spawnComet, 3000 + Math.random() * 4000);
             }
 
@@ -368,7 +362,6 @@
                 syncSize();
                 generateStars();
                 setLang('pt');
-                
                 setTimeout(spawnComet, 2000);
 
                 document.getElementById('sun-mass-slider').addEventListener('input', (e) => {
@@ -379,9 +372,7 @@
                     config.timeSpeed = parseFloat(e.target.value);
                     document.getElementById('time-speed-val').innerText = config.timeSpeed.toFixed(1);
                 });
-                document.getElementById('sun-hue-slider').addEventListener('input', (e) => {
-                    config.sunHue = parseInt(e.target.value);
-                });
+                document.getElementById('sun-hue-slider').addEventListener('input', (e) => config.sunHue = parseInt(e.target.value));
 
                 document.getElementById('edit-size').addEventListener('input', (e) => {
                     if(selectedPlanet) {
@@ -416,11 +407,51 @@
                     applyZoomLimits();
                 }, { passive: true });
 
+                // --- EVENTOS TOUCH PARA ZOOM E LANÇAMENTO ---
+                canvas.addEventListener('touchstart', (e) => {
+                    if (menuActive || isPhotoMode) return;
+                    
+                    if (e.touches.length === 2) {
+                        // Iniciar Zoom Pinch
+                        isDragging = false; // Cancela lançamento se começar a fazer zoom
+                        initialPinchDist = getPinchDist(e);
+                        initialScale = viewScale;
+                    } else if (e.touches.length === 1) {
+                        handleStart(e.touches[0].clientX, e.touches[0].clientY);
+                    }
+                }, { passive: false });
+
+                canvas.addEventListener('touchmove', (e) => {
+                    if (menuActive || isPhotoMode) return;
+                    e.preventDefault(); // Previne scroll da página
+
+                    if (e.touches.length === 2 && initialPinchDist !== null) {
+                        const currentDist = getPinchDist(e);
+                        const ratio = currentDist / initialPinchDist;
+                        viewScale = initialScale * ratio;
+                        applyZoomLimits();
+                    } else if (e.touches.length === 1 && isDragging) {
+                        currentMousePos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                    }
+                }, { passive: false });
+
+                canvas.addEventListener('touchend', (e) => {
+                    if (e.touches.length < 2) initialPinchDist = null;
+                    if (isDragging) handleEnd();
+                });
+
+                // Mouse fallback
                 canvas.addEventListener('mousedown', (e) => handleStart(e.clientX, e.clientY));
                 window.addEventListener('mousemove', (e) => { if (isDragging) currentMousePos = { x: e.clientX, y: e.clientY }; });
                 window.addEventListener('mouseup', handleEnd);
 
                 requestAnimationFrame(loop);
+            }
+
+            function getPinchDist(e) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                return Math.sqrt(dx * dx + dy * dy);
             }
 
             function applyZoomLimits() {
@@ -505,26 +536,13 @@
 
             window.closeEditor = () => { selectedPlanet = null; document.getElementById('planet-editor').style.display = 'none'; };
             window.deletePlanetEditor = () => { if(selectedPlanet) { planets = planets.filter(p => p !== selectedPlanet); closeEditor(); updatePlanetCount(); } };
-
             window.toggleMoonEditor = () => {
                 if(!selectedPlanet) return;
                 const t = i18n[currentLang];
-                if(selectedPlanet.moon) {
-                    selectedPlanet.moon = null;
-                    document.getElementById('edit-moon-btn').innerText = t.moonOn;
-                } else {
-                    const dist = selectedPlanet.size + 25, vel = Math.sqrt((G * selectedPlanet.mass * 2.8) / dist);
-                    selectedPlanet.moon = { relX: dist, relY: 0, vx: 0, vy: vel };
-                    document.getElementById('edit-moon-btn').innerText = t.moonOff;
-                }
+                if(selectedPlanet.moon) { selectedPlanet.moon = null; document.getElementById('edit-moon-btn').innerText = t.moonOn; } 
+                else { const dist = selectedPlanet.size + 25, vel = Math.sqrt((G * selectedPlanet.mass * 2.8) / dist); selectedPlanet.moon = { relX: dist, relY: 0, vx: 0, vy: vel }; document.getElementById('edit-moon-btn').innerText = t.moonOff; }
             };
-
-            window.toggleRingsEditor = () => {
-                if(!selectedPlanet) return;
-                selectedPlanet.rings = !selectedPlanet.rings;
-                document.getElementById('edit-rings-btn').innerText = selectedPlanet.rings ? i18n[currentLang].ringsOff : i18n[currentLang].ringsOn;
-            };
-
+            window.toggleRingsEditor = () => { if(!selectedPlanet) return; selectedPlanet.rings = !selectedPlanet.rings; document.getElementById('edit-rings-btn').innerText = selectedPlanet.rings ? i18n[currentLang].ringsOff : i18n[currentLang].ringsOn; };
             window.toggleHUD = () => {
                 hudVisible = !hudVisible;
                 ['ui-header', 'control-panel', 'reset-btn', '.stats'].forEach(sel => {
@@ -534,26 +552,13 @@
                 document.getElementById('interact-hint').style.opacity = hudVisible ? '0' : '1';
                 document.getElementById('interact-hint').style.pointerEvents = hudVisible ? 'none' : 'auto';
             };
-
             window.togglePhotoMode = () => {
                 isPhotoMode = !isPhotoMode;
                 document.body.classList.toggle('photo-mode-active', isPhotoMode);
-                if (isPhotoMode) {
-                    closeEditor();
-                    document.getElementById('interact-hint').style.opacity = '1';
-                    document.getElementById('interact-hint').style.pointerEvents = 'auto';
-                } else {
-                    trailCtx.clearRect(0, 0, trailCanvas.width, trailCanvas.height);
-                    document.getElementById('interact-hint').style.opacity = '0';
-                }
+                if (isPhotoMode) { closeEditor(); document.getElementById('interact-hint').style.opacity = '1'; document.getElementById('interact-hint').style.pointerEvents = 'auto'; } 
+                else { trailCtx.clearRect(0, 0, trailCanvas.width, trailCanvas.height); document.getElementById('interact-hint').style.opacity = '0'; }
             };
-
-            window.resetSim = () => {
-                planets = [];
-                trailCtx.clearRect(0, 0, trailCanvas.width, trailCanvas.height);
-                closeEditor();
-                updatePlanetCount();
-            };
+            window.resetSim = () => { planets = []; trailCtx.clearRect(0, 0, trailCanvas.width, trailCanvas.height); closeEditor(); updatePlanetCount(); };
 
             function updateZoomLogic() {
                 if (keys.q) viewScale *= (1 + zoomSpeed * 0.5);
@@ -585,15 +590,8 @@
             function drawStarField() {
                 ctx.save();
                 stars.forEach(s => {
-                    if (s.twinkle) {
-                        s.opacity += s.speed;
-                        if (s.opacity > 1 || s.opacity < 0.1) s.speed *= -1;
-                    }
-                    ctx.globalAlpha = s.opacity;
-                    ctx.fillStyle = '#ffffff';
-                    ctx.beginPath();
-                    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
-                    ctx.fill();
+                    if (s.twinkle) { s.opacity += s.speed; if (s.opacity > 1 || s.opacity < 0.1) s.speed *= -1; }
+                    ctx.globalAlpha = s.opacity; ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); ctx.fill();
                 });
                 ctx.restore();
             }
@@ -601,35 +599,13 @@
             function drawComets() {
                 ctx.save();
                 for (let i = comets.length - 1; i >= 0; i--) {
-                    const c = comets[i];
-                    c.x += c.vx;
-                    c.y += c.vy;
-
-                    // Brilho do cometa (Glow)
-                    ctx.shadowBlur = 15;
-                    ctx.shadowColor = `hsl(${c.hue}, 100%, 70%)`;
-
+                    const c = comets[i]; c.x += c.vx; c.y += c.vy;
+                    ctx.shadowBlur = 15; ctx.shadowColor = `hsl(${c.hue}, 100%, 70%)`;
                     const grad = ctx.createLinearGradient(c.x, c.y, c.x - c.vx * (c.length / 10), c.y - c.vy * (c.length / 10));
-                    grad.addColorStop(0, '#fff');
-                    grad.addColorStop(0.3, `hsl(${c.hue}, 100%, 80%)`);
-                    grad.addColorStop(1, 'transparent');
-
-                    ctx.strokeStyle = grad;
-                    ctx.lineWidth = 3;
-                    ctx.beginPath();
-                    ctx.moveTo(c.x, c.y);
-                    ctx.lineTo(c.x - c.vx * 15, c.y - c.vy * 15);
-                    ctx.stroke();
-
-                    // Cabeça do cometa
-                    ctx.fillStyle = '#fff';
-                    ctx.beginPath();
-                    ctx.arc(c.x, c.y, 2, 0, Math.PI * 2);
-                    ctx.fill();
-
-                    if (c.x < -400 || c.x > canvas.width + 400 || c.y < -400 || c.y > canvas.height + 400) {
-                        comets.splice(i, 1);
-                    }
+                    grad.addColorStop(0, '#fff'); grad.addColorStop(0.3, `hsl(${c.hue}, 100%, 80%)`); grad.addColorStop(1, 'transparent');
+                    ctx.strokeStyle = grad; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.x - c.vx * 15, c.y - c.vy * 15); ctx.stroke();
+                    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(c.x, c.y, 2, 0, Math.PI * 2); ctx.fill();
+                    if (c.x < -400 || c.x > canvas.width + 400 || c.y < -400 || c.y > canvas.height + 400) comets.splice(i, 1);
                 }
                 ctx.restore();
             }
@@ -637,57 +613,32 @@
             function checkCollisions() {
                 for (let i = 0; i < planets.length; i++) {
                     for (let j = i + 1; j < planets.length; j++) {
-                        const p1 = planets[i];
-                        const p2 = planets[j];
-                        const dx = p2.x - p1.x;
-                        const dy = p2.y - p1.y;
-                        const dist = Math.sqrt(dx * dx + dy * dy);
-                        
+                        const p1 = planets[i], p2 = planets[j], dx = p2.x - p1.x, dy = p2.y - p1.y, dist = Math.sqrt(dx * dx + dy * dy);
                         if (dist < p1.size + p2.size) {
-                            const winner = p1.mass >= p2.mass ? p1 : p2;
-                            const loser = p1.mass >= p2.mass ? p2 : p1;
-                            const totalMass = p1.mass + p2.mass;
-                            winner.vx = (p1.vx * p1.mass + p2.vx * p2.mass) / totalMass;
-                            winner.vy = (p1.vy * p1.mass + p2.vy * p2.mass) / totalMass;
-                            winner.mass = totalMass;
-                            winner.size = Math.min(80, Math.sqrt(p1.size * p1.size + p2.size * p2.size));
-                            winner.hue = (winner.hue + loser.hue) / 2;
-                            winner.color = `hsl(${winner.hue}, 80%, 65%)`;
-                            if (loser.rings) winner.rings = true;
-                            if (selectedPlanet === loser) selectedPlanet = winner;
-                            planets.splice(planets.indexOf(loser), 1);
-                            updatePlanetCount();
-                            return; 
+                            const winner = p1.mass >= p2.mass ? p1 : p2, loser = p1.mass >= p2.mass ? p2 : p1, totalMass = p1.mass + p2.mass;
+                            winner.vx = (p1.vx * p1.mass + p2.vx * p2.mass) / totalMass; winner.vy = (p1.vy * p1.mass + p2.vy * p2.mass) / totalMass;
+                            winner.mass = totalMass; winner.size = Math.min(80, Math.sqrt(p1.size * p1.size + p2.size * p2.size));
+                            winner.hue = (winner.hue + loser.hue) / 2; winner.color = `hsl(${winner.hue}, 80%, 65%)`;
+                            if (loser.rings) winner.rings = true; if (selectedPlanet === loser) selectedPlanet = winner;
+                            planets.splice(planets.indexOf(loser), 1); updatePlanetCount(); return; 
                         }
                     }
                 }
             }
 
             function loop() {
-                ctx.fillStyle = '#050508'; 
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
+                ctx.fillStyle = '#050508'; ctx.fillRect(0, 0, canvas.width, canvas.height);
                 if (menuActive) { requestAnimationFrame(loop); return; }
                 
-                drawStarField();
-                drawNebula();
-                drawComets(); // Renderizados por cima do fundo mas ignoram transformações de zoom (estão no "infinito")
-                
-                updateZoomLogic();
-                checkCollisions();
+                drawStarField(); drawNebula(); drawComets();
+                updateZoomLogic(); checkCollisions();
 
                 ctx.save();
-                const cx = canvas.width / 2;
-                const cy = canvas.height / 2;
-                ctx.translate(cx, cy);
-                ctx.scale(viewScale, viewScale);
-                ctx.translate(-cx, -cy);
+                const cx = canvas.width / 2, cy = canvas.height / 2;
+                ctx.translate(cx, cy); ctx.scale(viewScale, viewScale); ctx.translate(-cx, -cy);
 
                 if (isPhotoMode) {
-                    ctx.save();
-                    ctx.globalCompositeOperation = 'screen';
-                    ctx.drawImage(trailCanvas, 0, 0);
-                    ctx.restore();
+                    ctx.save(); ctx.globalCompositeOperation = 'screen'; ctx.drawImage(trailCanvas, 0, 0); ctx.restore();
                 }
 
                 const sx = canvas.width / 2, sy = canvas.height / 2;
@@ -702,39 +653,21 @@
 
                 for (let i = planets.length - 1; i >= 0; i--) {
                     const p = planets[i];
-                    
                     for(let s = 0; s < SUBSTEPS; s++) {
-                        const ox = p.x, oy = p.y;
-                        const dx = sx - p.x, dy = sy - p.y, d2 = dx * dx + dy * dy, d = Math.sqrt(d2);
-                        const force = (G * config.sunMass) / d2;
-                        p.vx += (dx / d) * force * dt; 
-                        p.vy += (dy / d) * force * dt; 
-                        p.x += p.vx * dt; 
-                        p.y += p.vy * dt;
+                        const ox = p.x, oy = p.y, dx = sx - p.x, dy = sy - p.y, d2 = dx * dx + dy * dy, d = Math.sqrt(d2), force = (G * config.sunMass) / d2;
+                        p.vx += (dx / d) * force * dt; p.vy += (dy / d) * force * dt; p.x += p.vx * dt; p.y += p.vy * dt;
 
                         if (isPhotoMode) {
-                            trailCtx.beginPath(); 
-                            trailCtx.strokeStyle = p.color; 
-                            trailCtx.globalAlpha = 0.3;
-                            trailCtx.lineWidth = 1; 
-                            trailCtx.moveTo(ox, oy); 
-                            trailCtx.lineTo(p.x, p.y);
-                            trailCtx.stroke();
+                            trailCtx.beginPath(); trailCtx.strokeStyle = p.color; trailCtx.globalAlpha = 0.3; trailCtx.lineWidth = 1; 
+                            trailCtx.moveTo(ox, oy); trailCtx.lineTo(p.x, p.y); trailCtx.stroke();
                         }
 
                         if (p.moon) {
-                            const m = p.moon;
-                            const mdx = -m.relX, mdy = -m.relY, md2 = mdx * mdx + mdy * mdy, md = Math.sqrt(md2);
-                            const mf = (G * p.mass * 3.5) / md2;
-                            m.vx += (mdx / md) * mf * dt; m.vy += (mdy / md) * mf * dt;
-                            m.relX += m.vx * dt; m.relY += m.vy * dt;
+                            const m = p.moon, mdx = -m.relX, mdy = -m.relY, md2 = mdx * mdx + mdy * mdy, md = Math.sqrt(md2), mf = (G * p.mass * 3.5) / md2;
+                            m.vx += (mdx / md) * mf * dt; m.vy += (mdy / md) * mf * dt; m.relX += m.vx * dt; m.relY += m.vy * dt;
                         }
 
-                        if (d < sRad + p.size) {
-                            planets.splice(i, 1);
-                            updatePlanetCount();
-                            break; 
-                        }
+                        if (d < sRad + p.size) { planets.splice(i, 1); updatePlanetCount(); break; }
                     }
 
                     if (planets[i]) {
@@ -744,47 +677,24 @@
                         ctx.stroke(); ctx.globalAlpha = 1;
 
                         if (p.rings) {
-                            ctx.save();
-                            ctx.translate(p.x, p.y);
-                            ctx.scale(1.2, 0.4);
-                            ctx.beginPath();
-                            ctx.arc(0, 0, p.size + 10, 0, Math.PI * 2);
-                            ctx.strokeStyle = p.color;
-                            ctx.lineWidth = 4;
-                            ctx.globalAlpha = 0.4;
-                            ctx.stroke();
-                            ctx.restore();
+                            ctx.save(); ctx.translate(p.x, p.y); ctx.scale(1.2, 0.4); ctx.beginPath(); ctx.arc(0, 0, p.size + 10, 0, Math.PI * 2);
+                            ctx.strokeStyle = p.color; ctx.lineWidth = 4; ctx.globalAlpha = 0.4; ctx.stroke(); ctx.restore();
                         }
 
                         ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
-                        
-                        if (p.moon) {
-                            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x + p.moon.relX, p.y + p.moon.relY, 2, 0, Math.PI * 2); ctx.fill();
-                        }
-
+                        if (p.moon) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x + p.moon.relX, p.y + p.moon.relY, 2, 0, Math.PI * 2); ctx.fill(); }
                         if (p === selectedPlanet && !isPhotoMode) {
-                            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 / viewScale;
-                            ctx.beginPath(); ctx.arc(p.x, p.y, p.size + 4, 0, Math.PI * 2); ctx.stroke();
+                            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 / viewScale; ctx.beginPath(); ctx.arc(p.x, p.y, p.size + 4, 0, Math.PI * 2); ctx.stroke();
                         }
-
-                        if (Math.abs(p.x - sx) > 80000 || Math.abs(p.y - sy) > 80000) {
-                            planets.splice(i, 1);
-                            updatePlanetCount();
-                        }
+                        if (Math.abs(p.x - sx) > 80000 || Math.abs(p.y - sy) > 80000) { planets.splice(i, 1); updatePlanetCount(); }
                     }
                 }
 
                 if (isDragging) {
                     const worldStart = screenToWorld(startPos.x, startPos.y);
                     const worldEnd = screenToWorld(currentMousePos.x, currentMousePos.y);
-                    ctx.beginPath(); 
-                    ctx.moveTo(worldStart.x, worldStart.y); 
-                    ctx.lineTo(worldEnd.x, worldEnd.y);
-                    ctx.strokeStyle = '#00ffcc'; 
-                    ctx.lineWidth = 2 / viewScale;
-                    ctx.setLineDash([5 / viewScale, 5 / viewScale]); 
-                    ctx.stroke(); 
-                    ctx.setLineDash([]);
+                    ctx.beginPath(); ctx.moveTo(worldStart.x, worldStart.y); ctx.lineTo(worldEnd.x, worldEnd.y);
+                    ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 2 / viewScale; ctx.setLineDash([5 / viewScale, 5 / viewScale]); ctx.stroke(); ctx.setLineDash([]);
                 }
                 ctx.restore();
                 requestAnimationFrame(loop);
