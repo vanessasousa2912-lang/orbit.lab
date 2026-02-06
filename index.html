@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Orbit lab! seu simulador gravitacional artístico </title>
+    <title>Orbit Lab! Seu simulador gravitacional artístico</title>
     <style>
         body {
             margin: 0; padding: 0; background-color: #050508; color: #e0e0e0;
@@ -84,7 +84,6 @@
         .editor-btn { background: #222; border: 1px solid #444; color: #fff; font-size: 10px; padding: 5px; width: 100%; margin-top: 8px; cursor: pointer; border-radius: 4px; }
         .delete-btn { color: #ff4444; border-color: #ff4444; }
 
-        /* Estilo Modo Foto - Interface Limpa */
         .photo-mode-active #ui-header, 
         .photo-mode-active #control-panel, 
         .photo-mode-active #reset-btn, 
@@ -134,13 +133,14 @@
         <div class="editor-title"><span id="ed-planet-label">PLANETA</span> <span class="editor-close" onclick="closeEditor()">X</span></div>
         <div class="control-group">
             <label id="ed-size-label">Tamanho</label>
-            <input type="range" id="edit-size" min="4" max="25" value="6">
+            <input type="range" id="edit-size" min="4" max="50" value="6">
         </div>
         <div class="control-group">
             <label id="ed-hue-label">Cor (Matiz)</label>
             <input type="range" id="edit-hue" min="0" max="360" value="180">
         </div>
         <button class="editor-btn" id="edit-moon-btn" onclick="toggleMoonEditor()">Ligar Lua</button>
+        <button class="editor-btn" id="edit-rings-btn" onclick="toggleRingsEditor()">Ligar Anéis</button>
         <button class="editor-btn delete-btn" id="ed-delete-btn" onclick="deletePlanetEditor()">Eliminar</button>
     </div>
 
@@ -198,18 +198,18 @@
             let isPhotoMode = false;
             let selectedPlanet = null;
 
-            // Sistema de Zoom
             let viewScale = 1.0;
-            const minScale = 0.2;
-            const maxScale = 5.0;
+            const minScale = 0.05;
+            const maxScale = 12.0;
             const zoomSpeed = 0.05;
             const keys = { q: false, e: false };
 
-            // Física Refinada
             const G = 1.2;
             const SUBSTEPS = 8; 
             let config = { sunMass: 20000, timeSpeed: 1.0, sunHue: 45 };
             let planets = [];
+            let stars = []; 
+            let comets = []; 
             let isDragging = false;
             let startPos = { x: 0, y: 0 }, currentMousePos = { x: 0, y: 0 };
 
@@ -233,6 +233,8 @@
                     hue: "Cor (Matiz)",
                     moonOn: "Ligar Lua",
                     moonOff: "Remover Lua",
+                    ringsOn: "Ligar Anéis",
+                    ringsOff: "Remover Anéis",
                     delete: "Eliminar",
                     labPlaceholder: "Nome do Lab..."
                 },
@@ -255,6 +257,8 @@
                     hue: "Color (Hue)",
                     moonOn: "Add Moon",
                     moonOff: "Remove Moon",
+                    ringsOn: "Add Rings",
+                    ringsOff: "Remove Rings",
                     delete: "Delete",
                     labPlaceholder: "Lab Name..."
                 },
@@ -264,19 +268,21 @@
                     speed: "Velocidad",
                     mass: "Masa Estrella",
                     sunHue: "Color del Sol (Matiz)",
-                    photoMode: "Modo Foto (P)",
+                    photoMode: "Ocultar HUD (P)",
                     hideHud: "Ocultar HUD (H)",
                     clearAll: "Limpiar Todo",
                     clearSys: "Limpiar Sistema",
                     bodies: "Cuerpos",
                     instr1: "• <b>Arrastra</b> para lanzar planetas.",
-                    instr2: "• <b>P</b> Modo Foto | <b>Q/E</b> Zoom.",
+                    instr2: "• <b>P</b> Photo Mode | <b>Q/E</b> Zoom.",
                     hint: "Clic para restaurar interfaz",
                     planet: "PLANETA",
                     size: "Tamaño",
                     hue: "Color (Matiz)",
                     moonOn: "Añadir Luna",
                     moonOff: "Quitar Luna",
+                    ringsOn: "Añadir Anillos",
+                    ringsOff: "Quitar Anillos",
                     delete: "Eliminar",
                     labPlaceholder: "Nombre del Lab..."
                 }
@@ -310,6 +316,7 @@
                 document.getElementById('ed-delete-btn').innerText = t.delete;
                 if (selectedPlanet) {
                     document.getElementById('edit-moon-btn').innerText = selectedPlanet.moon ? t.moonOff : t.moonOn;
+                    document.getElementById('edit-rings-btn').innerText = selectedPlanet.rings ? t.ringsOff : t.ringsOn;
                 }
                 updatePlanetCount();
             }
@@ -318,11 +325,52 @@
                 document.getElementById('planet-count').innerText = `${i18n[currentLang].bodies}: ${planets.length}`;
             }
 
+            function generateStars() {
+                stars = [];
+                const starCount = 400;
+                for (let i = 0; i < starCount; i++) {
+                    stars.push({
+                        x: Math.random() * canvas.width,
+                        y: Math.random() * canvas.height,
+                        size: Math.random() * 1.5,
+                        opacity: Math.random(),
+                        speed: 0.01 + Math.random() * 0.03, 
+                        twinkle: Math.random() > 0.8 
+                    });
+                }
+            }
+
+            function spawnComet() {
+                if (menuActive) return;
+                
+                // Escolhe um ponto de entrada aleatório nos bordos do ecrã
+                const side = Math.floor(Math.random() * 4);
+                let x, y, vx, vy;
+                const speed = 4 + Math.random() * 6; // Mais rápido que antes
+
+                if (side === 0) { x = -100; y = Math.random() * canvas.height; vx = speed; vy = (Math.random() - 0.5) * speed; } 
+                else if (side === 1) { x = canvas.width + 100; y = Math.random() * canvas.height; vx = -speed; vy = (Math.random() - 0.5) * speed; } 
+                else if (side === 2) { x = Math.random() * canvas.width; y = -100; vx = (Math.random() - 0.5) * speed; vy = speed; } 
+                else { x = Math.random() * canvas.width; y = canvas.height + 100; vx = (Math.random() - 0.5) * speed; vy = -speed; } 
+
+                comets.push({ 
+                    x, y, vx, vy, 
+                    length: 150 + Math.random() * 200,
+                    hue: 180 + Math.random() * 60 // Tons azulados/brancos
+                });
+                
+                // Próximo cometa muito mais cedo (3 a 7 segs)
+                setTimeout(spawnComet, 3000 + Math.random() * 4000);
+            }
+
             function init() {
-                window.addEventListener('resize', syncSize);
+                window.addEventListener('resize', () => { syncSize(); generateStars(); });
                 syncSize();
+                generateStars();
                 setLang('pt');
                 
+                setTimeout(spawnComet, 2000);
+
                 document.getElementById('sun-mass-slider').addEventListener('input', (e) => {
                     config.sunMass = parseInt(e.target.value);
                     document.getElementById('sun-mass-val').innerText = Math.round(e.target.value / 1000) + 'k';
@@ -348,7 +396,6 @@
                     }
                 });
 
-                // Zoom por teclado
                 window.addEventListener('keydown', (e) => {
                     const k = e.key.toLowerCase();
                     if (k === 'p') togglePhotoMode();
@@ -362,7 +409,6 @@
                     if (k === 'e') keys.e = false;
                 });
 
-                // Zoom por scroll
                 window.addEventListener('wheel', (e) => {
                     if (menuActive) return;
                     if (e.deltaY < 0) viewScale *= (1 + zoomSpeed);
@@ -401,7 +447,6 @@
                 }, 800);
             };
 
-            // Converte coordenadas da tela para o mundo (levando em conta o zoom)
             function screenToWorld(x, y) {
                 const cx = canvas.width / 2;
                 const cy = canvas.height / 2;
@@ -413,13 +458,11 @@
 
             function handleStart(x, y) {
                 if (menuActive || isPhotoMode) return;
-                
                 const worldPos = screenToWorld(x, y);
 
                 let clickedPlanet = null;
                 for (let p of planets) {
                     const d = Math.sqrt(Math.pow(worldPos.x - p.x, 2) + Math.pow(worldPos.y - p.y, 2));
-                    // A área de clique aumenta se o zoom for pequeno para facilitar a seleção
                     const clickArea = (p.size + 15) / Math.min(viewScale, 1.0);
                     if (d < clickArea) { clickedPlanet = p; break; }
                 }
@@ -438,13 +481,12 @@
             function launchPlanet() {
                 const worldStart = screenToWorld(startPos.x, startPos.y);
                 const worldEnd = screenToWorld(currentMousePos.x, currentMousePos.y);
-
                 const dx = (worldStart.x - worldEnd.x) * 0.12, dy = (worldStart.y - worldEnd.y) * 0.12;
                 const hue = Math.floor(Math.random() * 360);
                 planets.push({ 
                     x: worldStart.x, y: worldStart.y, vx: dx, vy: dy, 
                     size: 6, mass: 900, hue: hue, 
-                    color: `hsl(${hue}, 80%, 65%)`, trail: [], moon: null 
+                    color: `hsl(${hue}, 80%, 65%)`, trail: [], moon: null, rings: false 
                 });
                 updatePlanetCount();
             }
@@ -458,6 +500,7 @@
                 document.getElementById('edit-size').value = planet.size;
                 document.getElementById('edit-hue').value = planet.hue;
                 document.getElementById('edit-moon-btn').innerText = planet.moon ? i18n[currentLang].moonOff : i18n[currentLang].moonOn;
+                document.getElementById('edit-rings-btn').innerText = planet.rings ? i18n[currentLang].ringsOff : i18n[currentLang].ringsOn;
             }
 
             window.closeEditor = () => { selectedPlanet = null; document.getElementById('planet-editor').style.display = 'none'; };
@@ -474,6 +517,12 @@
                     selectedPlanet.moon = { relX: dist, relY: 0, vx: 0, vy: vel };
                     document.getElementById('edit-moon-btn').innerText = t.moonOff;
                 }
+            };
+
+            window.toggleRingsEditor = () => {
+                if(!selectedPlanet) return;
+                selectedPlanet.rings = !selectedPlanet.rings;
+                document.getElementById('edit-rings-btn').innerText = selectedPlanet.rings ? i18n[currentLang].ringsOff : i18n[currentLang].ringsOn;
             };
 
             window.toggleHUD = () => {
@@ -512,13 +561,121 @@
                 if (keys.q || keys.e) applyZoomLimits();
             }
 
+            function drawNebula() {
+                const time = Date.now() * 0.0005;
+                const pulse = Math.sin(time) * 0.5 + 0.5;
+                ctx.save();
+                ctx.globalCompositeOperation = 'screen';
+                for (let i = 0; i < 3; i++) {
+                    const x = (Math.sin(time * 0.2 + i) * 0.2 + 0.5) * canvas.width;
+                    const y = (Math.cos(time * 0.3 + i) * 0.2 + 0.5) * canvas.height;
+                    const radius = (400 + 200 * pulse) * (i + 1) * 0.8;
+                    const hue = (config.sunHue + 180 + i * 40) % 360; 
+                    const rg = ctx.createRadialGradient(x, y, 0, x, y, radius);
+                    const alpha = (0.05 + 0.05 * pulse) / (i + 1);
+                    rg.addColorStop(0, `hsla(${hue}, 70%, 50%, ${alpha})`);
+                    rg.addColorStop(0.5, `hsla(${hue}, 70%, 30%, ${alpha * 0.5})`);
+                    rg.addColorStop(1, 'transparent');
+                    ctx.fillStyle = rg;
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                }
+                ctx.restore();
+            }
+
+            function drawStarField() {
+                ctx.save();
+                stars.forEach(s => {
+                    if (s.twinkle) {
+                        s.opacity += s.speed;
+                        if (s.opacity > 1 || s.opacity < 0.1) s.speed *= -1;
+                    }
+                    ctx.globalAlpha = s.opacity;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                ctx.restore();
+            }
+
+            function drawComets() {
+                ctx.save();
+                for (let i = comets.length - 1; i >= 0; i--) {
+                    const c = comets[i];
+                    c.x += c.vx;
+                    c.y += c.vy;
+
+                    // Brilho do cometa (Glow)
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = `hsl(${c.hue}, 100%, 70%)`;
+
+                    const grad = ctx.createLinearGradient(c.x, c.y, c.x - c.vx * (c.length / 10), c.y - c.vy * (c.length / 10));
+                    grad.addColorStop(0, '#fff');
+                    grad.addColorStop(0.3, `hsl(${c.hue}, 100%, 80%)`);
+                    grad.addColorStop(1, 'transparent');
+
+                    ctx.strokeStyle = grad;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(c.x, c.y);
+                    ctx.lineTo(c.x - c.vx * 15, c.y - c.vy * 15);
+                    ctx.stroke();
+
+                    // Cabeça do cometa
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.arc(c.x, c.y, 2, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    if (c.x < -400 || c.x > canvas.width + 400 || c.y < -400 || c.y > canvas.height + 400) {
+                        comets.splice(i, 1);
+                    }
+                }
+                ctx.restore();
+            }
+
+            function checkCollisions() {
+                for (let i = 0; i < planets.length; i++) {
+                    for (let j = i + 1; j < planets.length; j++) {
+                        const p1 = planets[i];
+                        const p2 = planets[j];
+                        const dx = p2.x - p1.x;
+                        const dy = p2.y - p1.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        
+                        if (dist < p1.size + p2.size) {
+                            const winner = p1.mass >= p2.mass ? p1 : p2;
+                            const loser = p1.mass >= p2.mass ? p2 : p1;
+                            const totalMass = p1.mass + p2.mass;
+                            winner.vx = (p1.vx * p1.mass + p2.vx * p2.mass) / totalMass;
+                            winner.vy = (p1.vy * p1.mass + p2.vy * p2.mass) / totalMass;
+                            winner.mass = totalMass;
+                            winner.size = Math.min(80, Math.sqrt(p1.size * p1.size + p2.size * p2.size));
+                            winner.hue = (winner.hue + loser.hue) / 2;
+                            winner.color = `hsl(${winner.hue}, 80%, 65%)`;
+                            if (loser.rings) winner.rings = true;
+                            if (selectedPlanet === loser) selectedPlanet = winner;
+                            planets.splice(planets.indexOf(loser), 1);
+                            updatePlanetCount();
+                            return; 
+                        }
+                    }
+                }
+            }
+
             function loop() {
-                ctx.fillStyle = '#050508'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#050508'; 
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
                 if (menuActive) { requestAnimationFrame(loop); return; }
                 
+                drawStarField();
+                drawNebula();
+                drawComets(); // Renderizados por cima do fundo mas ignoram transformações de zoom (estão no "infinito")
+                
                 updateZoomLogic();
+                checkCollisions();
 
-                // Aplicar transformações de Zoom
                 ctx.save();
                 const cx = canvas.width / 2;
                 const cy = canvas.height / 2;
@@ -526,12 +683,8 @@
                 ctx.scale(viewScale, viewScale);
                 ctx.translate(-cx, -cy);
 
-                // No Modo Foto, desenhamos os rastros persistentes
                 if (isPhotoMode) {
-                    // Nota: O rastro do Modo Foto em Canvas escalado pode exigir redesenho ou offset.
-                    // Para simplificar, desenhamos o canvas de rastro projetado.
                     ctx.save();
-                    // Como o trailCanvas é estático, precisamos compensar a escala
                     ctx.globalCompositeOperation = 'screen';
                     ctx.drawImage(trailCanvas, 0, 0);
                     ctx.restore();
@@ -542,7 +695,6 @@
                 const sRad = 25 + (config.sunMass / 15000) * 4;
                 const sunColor = `hsl(${config.sunHue}, 100%, 60%)`;
                 
-                // Brilho do Sol
                 const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, sRad * 4);
                 g.addColorStop(0, '#fff'); g.addColorStop(0.2, sunColor); g.addColorStop(1, 'transparent');
                 ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, sRad * 5, 0, Math.PI * 2); ctx.fill();
@@ -554,7 +706,6 @@
                     for(let s = 0; s < SUBSTEPS; s++) {
                         const ox = p.x, oy = p.y;
                         const dx = sx - p.x, dy = sy - p.y, d2 = dx * dx + dy * dy, d = Math.sqrt(d2);
-                        
                         const force = (G * config.sunMass) / d2;
                         p.vx += (dx / d) * force * dt; 
                         p.vy += (dy / d) * force * dt; 
@@ -562,22 +713,17 @@
                         p.y += p.vy * dt;
 
                         if (isPhotoMode) {
-                            trailCtx.save();
-                            // Desenha no trailCanvas (que não sofre escala direta para não borrar)
-                            // Precisamos transformar as coordenadas mundiais para o canvas estático
-                            trailCtx.beginPath(); trailCtx.strokeStyle = p.color; trailCtx.globalAlpha = 0.4;
+                            trailCtx.beginPath(); 
+                            trailCtx.strokeStyle = p.color; 
+                            trailCtx.globalAlpha = 0.3;
                             trailCtx.lineWidth = 1; 
-                            
-                            // Desenho do rastro direto no trailCanvas (precisa compensar zoom se quiser persistência perfeita)
-                            // Por simplicidade aqui, o rastro "Modo Foto" fica fixo na resolução original.
-                            trailCtx.moveTo(ox, oy); trailCtx.lineTo(p.x, p.y);
+                            trailCtx.moveTo(ox, oy); 
+                            trailCtx.lineTo(p.x, p.y);
                             trailCtx.stroke();
-                            trailCtx.restore();
                         }
 
-                        // Física da Lua
                         if (p.moon) {
-                            const m = p.moon, mox = p.x + m.relX, moy = p.y + m.relY;
+                            const m = p.moon;
                             const mdx = -m.relX, mdy = -m.relY, md2 = mdx * mdx + mdy * mdy, md = Math.sqrt(md2);
                             const mf = (G * p.mass * 3.5) / md2;
                             m.vx += (mdx / md) * mf * dt; m.vy += (mdy / md) * mf * dt;
@@ -597,6 +743,19 @@
                         p.trail.forEach((pt, idx) => idx === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
                         ctx.stroke(); ctx.globalAlpha = 1;
 
+                        if (p.rings) {
+                            ctx.save();
+                            ctx.translate(p.x, p.y);
+                            ctx.scale(1.2, 0.4);
+                            ctx.beginPath();
+                            ctx.arc(0, 0, p.size + 10, 0, Math.PI * 2);
+                            ctx.strokeStyle = p.color;
+                            ctx.lineWidth = 4;
+                            ctx.globalAlpha = 0.4;
+                            ctx.stroke();
+                            ctx.restore();
+                        }
+
                         ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
                         
                         if (p.moon) {
@@ -604,26 +763,30 @@
                         }
 
                         if (p === selectedPlanet && !isPhotoMode) {
-                            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 / viewScale; // Ajusta espessura da seleção
+                            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 / viewScale;
                             ctx.beginPath(); ctx.arc(p.x, p.y, p.size + 4, 0, Math.PI * 2); ctx.stroke();
                         }
 
-                        // Planetas muito longe são removidos (ajustado para o mundo)
-                        if (Math.abs(p.x - sx) > 20000 || Math.abs(p.y - sy) > 20000) {
+                        if (Math.abs(p.x - sx) > 80000 || Math.abs(p.y - sy) > 80000) {
                             planets.splice(i, 1);
                             updatePlanetCount();
                         }
                     }
                 }
 
-                ctx.restore(); // Fim das transformações de Zoom
-
-                // UI que não sofre zoom (Linha de lançamento)
                 if (isDragging) {
-                    ctx.beginPath(); ctx.moveTo(startPos.x, startPos.y); ctx.lineTo(currentMousePos.x, currentMousePos.y);
-                    ctx.strokeStyle = '#00ffcc'; ctx.setLineDash([5, 5]); ctx.stroke(); ctx.setLineDash([]);
+                    const worldStart = screenToWorld(startPos.x, startPos.y);
+                    const worldEnd = screenToWorld(currentMousePos.x, currentMousePos.y);
+                    ctx.beginPath(); 
+                    ctx.moveTo(worldStart.x, worldStart.y); 
+                    ctx.lineTo(worldEnd.x, worldEnd.y);
+                    ctx.strokeStyle = '#00ffcc'; 
+                    ctx.lineWidth = 2 / viewScale;
+                    ctx.setLineDash([5 / viewScale, 5 / viewScale]); 
+                    ctx.stroke(); 
+                    ctx.setLineDash([]);
                 }
-                
+                ctx.restore();
                 requestAnimationFrame(loop);
             }
             init();
