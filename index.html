@@ -530,12 +530,20 @@
                 ctx.drawImage(trailCanvas, cx - WORLD_SIZE/2, cy - WORLD_SIZE/2);
                 ctx.restore();
 
-                // Estrela Central
+                // --- ESTRELA CENTRAL (SOL) ---
                 const sRad = 25 + (config.sunMass / 15000) * 4;
                 const sunColor = `hsl(${config.sunHue}, 100%, 60%)`;
-                const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, sRad * 4);
-                g.addColorStop(0, '#fff'); g.addColorStop(0.2, sunColor); g.addColorStop(1, 'transparent');
-                ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, sRad * 5, 0, Math.PI * 2); ctx.fill();
+                
+                // Removido o núcleo branco e ajustado para um brilho mais saturado
+                const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, sRad * 5);
+                g.addColorStop(0, sunColor); // Cor base no centro
+                g.addColorStop(0.4, `hsla(${config.sunHue}, 100%, 50%, 0.8)`);
+                g.addColorStop(1, 'transparent');
+                
+                ctx.fillStyle = g; 
+                ctx.beginPath(); 
+                ctx.arc(cx, cy, sRad * 5, 0, Math.PI * 2); 
+                ctx.fill();
 
                 for (let i = planets.length - 1; i >= 0; i--) {
                     const p = planets[i];
